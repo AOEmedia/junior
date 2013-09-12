@@ -1,12 +1,13 @@
 <?php
 namespace Junior;
+
 use Junior\Clientside\Request,
-    Junior\Clientside\Response,
-    Junior\Clientside\Exception;
+    Junior\Clientside\Response;
 
-class Client {
-
-    public $uri, $authHeader;
+class Client
+{
+    public $uri;
+    public $authHeader;
 
     // create new client connection
     public function __construct($uri)
@@ -18,6 +19,7 @@ class Client {
     public function __call($method, $params)
     {
         $req = new Request($method, $params);
+
         return $this->sendRequest($req);
     }
 
@@ -42,7 +44,7 @@ class Client {
             throw new Clientside\Exception("Mismatched request id");
         }
 
-        if(isset($response->error_code)) {
+        if (isset($response->error_code)) {
             throw new Clientside\Exception("{$response->error_code} {$response->error_message}", $response->error_code);
         }
 
@@ -57,19 +59,20 @@ class Client {
         }
 
         $this->send($req->getJSON(), true);
+
         return true;
     }
 
     // send an array of request objects as a batch
     public function sendBatch($reqs)
     {
-        $arr = array();
-        $ids = array();
+        $arr        = array();
+        $ids        = array();
         $all_notify = true;
         foreach ($reqs as $req) {
             if ($req->id) {
                 $all_notify = false;
-                $ids[] = $req->id;
+                $ids[]      = $req->id;
             }
             $arr[] = $req->getArray();
         }
@@ -109,14 +112,16 @@ class Client {
         }
 
         // prepare data to be sent
-        $opts = array(
+        $opts    = array(
             'http' => array(
                 'method'  => 'POST',
                 'header'  => $header,
-                'content' => $json));
+                'content' => $json
+            )
+        );
         $context = stream_context_create($opts);
 
-        // try to physically send data to destination 
+        // try to physically send data to destination
         try {
             $response = file_get_contents($this->uri, false, $context);
         } catch (\Exception $e) {
@@ -149,6 +154,7 @@ class Client {
         if ($json_response === null) {
             throw new Clientside\Exception("Unable to decode JSON response from: {$json}");
         }
+
         return $json_response;
     }
 
@@ -161,6 +167,7 @@ class Client {
             foreach ($response as $res) {
                 $response_arr[$res->id] = $this->handleResponse($res);
             }
+
             return $response_arr;
         }
 
@@ -172,5 +179,4 @@ class Client {
         // return successful response
         return new Response($response->result, $response->id);
     }
-
 }

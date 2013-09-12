@@ -45,10 +45,10 @@ class Server {
             $params = array();
         }
         $reflection = new \ReflectionMethod($this->exposed_instance, $method);
-        
+
         // only allow calls to public functions
         if (!$reflection->isPublic()) {
-            throw new Serverside\Exception("Called method is not publically accessible.");
+            throw new Serverside\Exception("Called method is not publicly accessible.");
         }
 
         // enforce correct number of arguments
@@ -56,7 +56,7 @@ class Server {
         if ($num_required_params > count($params)) {
             throw new Serverside\Exception("Too few parameters passed.");
         }
-        
+
         return $reflection->invokeArgs($this->exposed_instance, $params);
     }
 
