@@ -6,70 +6,110 @@ use Junior\Clientside\Request,
 
 class Client
 {
+    /**
+     * Server url
+     *
+     * @var string
+     */
     public $uri;
+
+    /**
+     * Auth header
+     *
+     * @var string
+     */
     public $authHeader;
 
-    // create new client connection
+    /**
+     * Create new client connection
+     *
+     * @param string $uri
+     */
     public function __construct($uri)
     {
         $this->uri = $uri;
     }
 
-    // shortcut to call a single, non-notification request
+    /**
+     * Shortcut to call a single, non-notification request
+     *
+     * @param string $method
+     * @param mixed $params
+     * @return Response
+     */
     public function __call($method, $params)
     {
-        $req = new Request($method, $params);
-
-        return $this->sendRequest($req);
+        return $this->sendRequest(new Request($method, $params));
     }
 
-    // set basic http authentication
+    /**
+     * Set basic http authentication
+     *
+     * @param string $username
+     * @param string $password
+     */
     public function setBasicAuth($username, $password)
     {
         $this->authHeader = "Authorization: Basic " . base64_encode("$username:$password") . "\r\n";
     }
 
-    // clear any existing http authentication
+    /**
+     * Clear any existing http authentication
+     */
     public function clearAuth()
     {
         $this->authHeader = null;
     }
 
-    // send a single request object
-    public function sendRequest($req)
+    /**
+     * Send a single request object
+     *
+     * @param Request $request
+     * @return array|bool|Response
+     * @throws Clientside\Exception
+     */
+    public function sendRequest(Request $request)
     {
-        $response = $this->send($req->getJSON());
+        $response = $this->send($request->getJSON());
 
-        if ($response->id != $req->id) {
+        if ($response->id != $request->id) {
             throw new Clientside\Exception("Mismatched request id");
         }
 
-        if (isset($response->error_code)) {
-            throw new Clientside\Exception("{$response->error_code} {$response->error_message}", $response->error_code);
-        }
-
-        return $response->result;
+        return $response;
     }
 
-    // send a single notify request object
-    public function sendNotify($req)
+    /**
+     * Send a single notify request object
+     *
+     * @param Request $request
+     * @return bool
+     * @throws Clientside\Exception
+     */
+    public function sendNotify(Request $request)
     {
-        if (property_exists($req, 'id') && $req->id != null) {
+        if (property_exists($request, 'id') && $request->id != null) {
             throw new Clientside\Exception("Notify requests must not have ID set");
         }
 
-        $this->send($req->getJSON(), true);
+        $this->send($request->getJSON(), true);
 
         return true;
     }
 
-    // send an array of request objects as a batch
-    public function sendBatch($reqs)
+    /**
+     * Send an array of request objects as a batch
+     *
+     * @param Request[] $requests
+     * @return array|bool
+     * @throws Clientside\Exception
+     */
+    public function sendBatch(array $requests)
     {
         $arr        = array();
         $ids        = array();
         $all_notify = true;
-        foreach ($reqs as $req) {
+        foreach ($requests as $req) {
             if ($req->id) {
                 $all_notify = false;
                 $ids[]      = $req->id;
@@ -84,10 +124,10 @@ class Client
         }
 
         // check for missing ids and return responses in order of requests
-        $ordered_response = array();
+        $orderedResponse = array();
         foreach ($ids as $id) {
             if (array_key_exists($id, $response)) {
-                $ordered_response[] = $response[$id];
+                $orderedResponse[] = $response[$id];
                 unset($response[$id]);
             } else {
                 throw new Clientside\Exception("Missing id in response");
@@ -99,10 +139,17 @@ class Client
             throw new Clientside\Exception("Extra id(s) in response");
         }
 
-        return $ordered_response;
+        return $orderedResponse;
     }
 
-    // send raw json to the server
+    /**
+     * Send raw json to the server
+     *
+     * @param string $json
+     * @param bool $notify
+     * @return array|bool|Response
+     * @throws Clientside\Exception
+     */
     public function send($json, $notify = false)
     {
         // use http authentication header if set
@@ -147,8 +194,14 @@ class Client
         return $this->handleResponse($json_response);
     }
 
-    // decode json throwing exception if unable
-    function decodeJSON($json)
+    /**
+     * Decode json throwing exception if unable
+     *
+     * @param string $json
+     * @return mixed
+     * @throws Clientside\Exception
+     */
+    public function decodeJSON($json)
     {
         $json_response = json_decode($json);
         if ($json_response === null) {
@@ -158,17 +211,22 @@ class Client
         return $json_response;
     }
 
-    // handle the response and return a result or an error
+    /**
+     * Handle the response and return a result or an error
+     *
+     * @param mixed $response
+     * @return array|Response
+     */
     public function handleResponse($response)
     {
         // recursion for batch
         if (is_array($response)) {
-            $response_arr = array();
+            $responseArray = array();
             foreach ($response as $res) {
-                $response_arr[$res->id] = $this->handleResponse($res);
+                $responseArray[$res->id] = $this->handleResponse($res);
             }
 
-            return $response_arr;
+            return $responseArray;
         }
 
         // return error response
