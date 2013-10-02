@@ -21,6 +21,13 @@ class Client
     public $authHeader;
 
     /**
+     * Timeout for the request in seconds
+     *
+     * @var int
+     */
+    public $timeOut = 60;
+
+    /**
      * Create new client connection
      *
      * @param string $uri
@@ -51,6 +58,16 @@ class Client
     public function setBasicAuth($username, $password)
     {
         $this->authHeader = "Authorization: Basic " . base64_encode("$username:$password") . "\r\n";
+    }
+
+    /**
+     * Set timeout for request in seconds
+     *
+     * @param int $timeOut
+     */
+    public function setTimeOut($timeOut)
+    {
+        $this->timeOut = $timeOut;
     }
 
     /**
@@ -163,7 +180,8 @@ class Client
             'http' => array(
                 'method'  => 'POST',
                 'header'  => $header,
-                'content' => $json
+                'content' => $json,
+                'timeout' => $this->timeOut,
             )
         );
         $context = stream_context_create($opts);
