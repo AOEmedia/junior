@@ -211,7 +211,7 @@ class Client
         $url      = str_replace('http://', '', $this->uri);
         $temp     = explode('/', $url);
         $domain   = $temp[0];
-        $get      = str_replace($domain, '', $sUrl);
+        $get      = str_replace($domain, '', $url);
         $fp       = fsockopen($domain, 80, $errno, $errstr, (int) $this->timeOut);
 
         if ($fp) {
