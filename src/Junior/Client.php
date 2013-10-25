@@ -175,20 +175,9 @@ class Client
             $header .= $this->authHeader;
         }
 
-        // prepare data to be sent
-        $opts    = array(
-            'http' => array(
-                'method'  => 'POST',
-                'header'  => $header,
-                'content' => $json,
-                'timeout' => $this->timeOut,
-            )
-        );
-        $context = stream_context_create($opts);
-
         // try to physically send data to destination
         try {
-            $response = file_get_contents($this->uri, false, $context);
+            $response = $this->fileGetContents($json);
         } catch (\Exception $e) {
             $message = "Unable to connect to {$this->uri}";
             $message .= PHP_EOL . $e->getMessage();
@@ -210,6 +199,50 @@ class Client
 
         // handle response, create response object and return it
         return $this->handleResponse($json_response);
+    }
+
+    /**
+     * @param $json
+     * @return string
+     */
+    public function fileGetContents($json)
+    {
+        $response = '';
+        $url      = str_replace('http://', '', $this->uri);
+        $temp     = explode('/', $url);
+        $domain   = $temp[0];
+        $get      = str_replace($domain, '', $sUrl);
+        $fp       = fsockopen($domain, 80, $errno, $errstr, (int) $this->timeOut);
+
+        if ($fp) {
+            // set timeOut for request
+            stream_set_timeout($fp, (int) $this->timeOut);
+
+            // write data
+            fwrite($fp, "POST $get HTTP/1.0\r\n");
+            fwrite($fp, "Host: $domain\r\n");
+            fwrite($fp, "Content-Length: ".strlen($json)."\r\n");
+            fwrite($fp, "Connection: close\r\n");
+            fwrite($fp, "\r\n");
+            fwrite($fp, $json);
+
+            $info = stream_get_meta_data($fp);
+            while (!feof($fp) && !$info['timed_out']) {
+                $response .= fgets($fp, 4096);
+                $info      = stream_get_meta_data($fp);
+            }
+
+            if ($info['timed_out']) {
+                \Mage::log("Connection Timed Out!");
+                return false;
+            }
+            else {
+                $parsedResponse = explode("\n", $response);
+            }
+            fclose($fp);
+        }
+
+        return trim(end($parsedResponse));
     }
 
     /**
