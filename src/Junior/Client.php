@@ -171,6 +171,7 @@ class Client
     {
         // use http authentication header if set
         $header = "Content-Type: application/json\r\n";
+        $header .= "Connection: close\r\n";
         if ($this->authHeader) {
             $header .= $this->authHeader;
         }
