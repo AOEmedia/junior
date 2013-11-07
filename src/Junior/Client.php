@@ -169,36 +169,13 @@ class Client
      */
     public function send($json, $notify = false)
     {
-        // use http authentication header if set
-        $header = "Content-Type: application/json\r\n";
-        $header .= "Connection: close\r\n";
-        if ($this->authHeader) {
-            $header .= $this->authHeader;
-        }
-
-        // prepare data to be sent
-        $opts    = array(
-            'http' => array(
-                'method'  => 'POST',
-                'header'  => $header,
-                'content' => $json,
-                'timeout' => $this->timeOut,
-            )
-        );
-        $context = stream_context_create($opts);
-
         // try to physically send data to destination
         try {
-            $response = file_get_contents($this->uri, false, $context);
+            $response = $this->_doRequest($json);
         } catch (\Exception $e) {
             $message = "Unable to connect to {$this->uri}";
             $message .= PHP_EOL . $e->getMessage();
             throw new Clientside\Exception($message);
-        }
-
-        // handle communication errors
-        if ($response === false) {
-            throw new Clientside\Exception("Unable to connect to {$this->uri}");
         }
 
         // notify has no response
@@ -207,10 +184,77 @@ class Client
         }
 
         // try to decode json
-        $json_response = $this->decodeJSON($response);
+        $jsonResponse = $this->decodeJSON($response);
 
         // handle response, create response object and return it
-        return $this->handleResponse($json_response);
+        return $this->handleResponse($jsonResponse);
+    }
+
+    /**
+     * @param string $json
+     * @return string
+     * @throws \RuntimeException
+     * @throws \InvalidArgumentException
+     */
+    protected function _doRequest($json)
+    {
+        $streamHandle = $this->_openConnection($json);
+
+        $response = '';
+        $info     = stream_get_meta_data($streamHandle);
+        while (!feof($streamHandle) && !$info['timed_out']) {
+            $response .= fgets($streamHandle, 4096);
+            $info = stream_get_meta_data($streamHandle);
+        }
+        fclose($streamHandle);
+
+        if ($info['timed_out']) {
+            throw new \RuntimeException("Connection timed out");
+        } else {
+            $parts = explode("\r\n\r\n", $response);
+            // strip headers
+            array_shift($parts);
+
+            return trim(implode("\r\n\r\n", $parts));
+        }
+    }
+
+    /**
+     * Create connection to server via socket
+     *
+     * @param string $json
+     * @return resource
+     * @throws \InvalidArgumentException
+     */
+    protected function _openConnection($json)
+    {
+        $url = str_replace('http://', '', $this->uri);
+        $url = str_replace('https://', '', $url);
+        list($domain,) = explode('/', $url);
+        $path         = str_replace($domain, '', $url);
+
+        $streamHandle = fsockopen($domain, 80, $errorCode, $errorMessage, (int)$this->timeOut);
+        if ($streamHandle === false) {
+            throw new \InvalidArgumentException(sprintf("Unable to connect: [%d] %s", $errorCode, $errorMessage));
+        }
+
+        fwrite($streamHandle, "POST $path HTTP/1.0\r\n");
+        fwrite($streamHandle, "Host: $domain\r\n");
+        fwrite($streamHandle, "Content-Type: application/json\r\n");
+        // use http authentication header if set
+        if ($this->authHeader) {
+            fwrite($streamHandle, $this->authHeader);
+        }
+        fwrite($streamHandle, "Content-Length: " . mb_strlen($json) . "\r\n");
+        fwrite($streamHandle, "Connection: close\r\n");
+        fwrite($streamHandle, "\r\n");
+
+        // set timeOut for request
+        stream_set_timeout($streamHandle, (int)$this->timeOut);
+
+        fwrite($streamHandle, $json);
+
+        return $streamHandle;
     }
 
     /**
