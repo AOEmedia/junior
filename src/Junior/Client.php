@@ -7,34 +7,52 @@ use Junior\Clientside\Request,
 class Client
 {
     /**
-     * Server url
+     * Server domain name
      *
      * @var string
      */
-    public $uri;
+    protected $_serverDomain;
+
+    /**
+     * Server path
+     *
+     * @var string
+     */
+    protected $_serverPath;
+
+    /**
+     * Server port
+     *
+     * @var int
+     */
+    protected $_serverPort = 80;
 
     /**
      * Auth header
      *
      * @var string
      */
-    public $authHeader;
+    protected $_authHeader;
 
     /**
      * Timeout for the request in seconds
      *
      * @var int
      */
-    public $timeOut = 60;
+    protected $_timeOut = 60;
 
     /**
      * Create new client connection
      *
-     * @param string $uri
+     * @param string $domain
+     * @param int $port
+     * @param string $path
      */
-    public function __construct($uri)
+    public function __construct($domain, $port = 80, $path = '')
     {
-        $this->uri = $uri;
+        $this->_serverDomain = (string)$domain;
+        $this->_serverPort   = (int)$port;
+        $this->_serverPath   = (string)$path;
     }
 
     /**
@@ -57,7 +75,7 @@ class Client
      */
     public function setBasicAuth($username, $password)
     {
-        $this->authHeader = "Authorization: Basic " . base64_encode("$username:$password") . "\r\n";
+        $this->_authHeader = "Authorization: Basic " . base64_encode("$username:$password") . "\r\n";
     }
 
     /**
@@ -67,7 +85,7 @@ class Client
      */
     public function setTimeOut($timeOut)
     {
-        $this->timeOut = $timeOut;
+        $this->_timeOut = (int)$timeOut;
     }
 
     /**
@@ -75,7 +93,7 @@ class Client
      */
     public function clearAuth()
     {
-        $this->authHeader = null;
+        $this->_authHeader = null;
     }
 
     /**
@@ -173,7 +191,7 @@ class Client
         try {
             $response = $this->_doRequest($json);
         } catch (\Exception $e) {
-            $message = "Unable to connect to {$this->uri}";
+            $message = "Unable to connect to {$this->_serverPath}";
             $message .= PHP_EOL . $e->getMessage();
             throw new Clientside\Exception($message);
         }
@@ -228,29 +246,24 @@ class Client
      */
     protected function _openConnection($json)
     {
-        $url = str_replace('http://', '', $this->uri);
-        $url = str_replace('https://', '', $url);
-        list($domain,) = explode('/', $url);
-        $path         = str_replace($domain, '', $url);
-
-        $streamHandle = fsockopen($domain, 80, $errorCode, $errorMessage, (int)$this->timeOut);
+        $streamHandle = fsockopen($this->_serverDomain, $this->_serverPort, $errorCode, $errorMessage, $this->_timeOut);
         if ($streamHandle === false) {
             throw new \InvalidArgumentException(sprintf("Unable to connect: [%d] %s", $errorCode, $errorMessage));
         }
 
-        fwrite($streamHandle, "POST $path HTTP/1.0\r\n");
-        fwrite($streamHandle, "Host: $domain\r\n");
+        fwrite($streamHandle, "POST {$this->_serverPath} HTTP/1.0\r\n");
+        fwrite($streamHandle, "Host: {$this->_serverDomain}\r\n");
         fwrite($streamHandle, "Content-Type: application/json\r\n");
         // use http authentication header if set
-        if ($this->authHeader) {
-            fwrite($streamHandle, $this->authHeader);
+        if ($this->_authHeader) {
+            fwrite($streamHandle, $this->_authHeader);
         }
         fwrite($streamHandle, "Content-Length: " . mb_strlen($json) . "\r\n");
         fwrite($streamHandle, "Connection: close\r\n");
         fwrite($streamHandle, "\r\n");
 
         // set timeOut for request
-        stream_set_timeout($streamHandle, (int)$this->timeOut);
+        stream_set_timeout($streamHandle, $this->_timeOut);
 
         fwrite($streamHandle, $json);
 
@@ -299,5 +312,13 @@ class Client
 
         // return successful response
         return new Response($response->result, $response->id);
+    }
+
+    /**
+     * @return string
+     */
+    public function getAuthHeader()
+    {
+        return $this->_authHeader;
     }
 }

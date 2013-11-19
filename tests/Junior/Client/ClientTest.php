@@ -6,7 +6,7 @@ class ClientTest extends PHPUnit_Framework_TestCase {
 
     public function setUp()
     {
-        $this->fake_uri = 'foo://bar';
+        $this->fake_uri = 'bar';
     }
 
     public function tearDown()
@@ -58,7 +58,7 @@ class ClientTest extends PHPUnit_Framework_TestCase {
         $client = new Junior\Client($this->fake_uri);
         $client->setBasicAuth('foo', 'bar');
         $expected = "Authorization: Basic Zm9vOmJhcg==\r\n";
-        $this->assertEquals($expected, $client->authHeader);
+        $this->assertEquals($expected, $client->getAuthHeader());
     }
 
     public function testclearAuth()
@@ -67,7 +67,7 @@ class ClientTest extends PHPUnit_Framework_TestCase {
         $client->clearAuth();
         $client->setBasicAuth('foo', 'bar');
         $client->clearAuth();
-        $this->assertNull($client->authHeader);
+        $this->assertNull($client->getAuthHeader());
     }
 
     public function testSendRequestGoodId()

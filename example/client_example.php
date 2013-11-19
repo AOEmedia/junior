@@ -3,7 +3,7 @@
 require_once("../src/autoload.php");
 
 // create a new instance of JuniorClient with the URI of te
-$client = new Junior\Client("http://www.example.com");
+$client = new Junior\Client("www.example.com");
 
 // you can use the magic method shortcut to make requests...
 $response = $client->foo(); // --> "bar"
