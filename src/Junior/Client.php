@@ -28,6 +28,13 @@ class Client
     protected $_serverPort = 80;
 
     /**
+     * Server transport
+     *
+     * @var int
+     */
+    protected $_serverTransport;
+
+    /**
      * Auth header
      *
      * @var string
@@ -47,12 +54,14 @@ class Client
      * @param string $domain
      * @param int $port
      * @param string $path
+     * @param string $transport
      */
-    public function __construct($domain, $port = 80, $path = '')
+    public function __construct($domain, $port = 80, $path = '', $transport = null)
     {
-        $this->_serverDomain = (string)$domain;
-        $this->_serverPort   = (int)$port;
-        $this->_serverPath   = (string)$path;
+        $this->_serverDomain    = (string)$domain;
+        $this->_serverPort      = (int)$port;
+        $this->_serverPath      = (string)$path;
+        $this->_serverTransport = (string)$transport;
     }
 
     /**
@@ -72,28 +81,38 @@ class Client
      *
      * @param string $username
      * @param string $password
+     * @return $this
      */
     public function setBasicAuth($username, $password)
     {
         $this->_authHeader = "Authorization: Basic " . base64_encode("$username:$password") . "\r\n";
+
+        return $this;
     }
 
     /**
      * Set timeout for request in seconds
      *
      * @param int $timeOut
+     * @return $this
      */
     public function setTimeOut($timeOut)
     {
         $this->_timeOut = (int)$timeOut;
+
+        return $this;
     }
 
     /**
      * Clear any existing http authentication
+     *
+     * @return $this
      */
     public function clearAuth()
     {
         $this->_authHeader = null;
+
+        return $this;
     }
 
     /**
@@ -218,15 +237,16 @@ class Client
     {
         $streamHandle = $this->_openConnection($json);
 
-        $response = '';
-        $info     = stream_get_meta_data($streamHandle);
-        while (!feof($streamHandle) && !$info['timed_out']) {
-            $response .= fgets($streamHandle, 4096);
+        $response  = '';
+        $startTime = time();
+        $info      = stream_get_meta_data($streamHandle);
+        while (!feof($streamHandle) && !$info['timed_out'] && time() - $startTime <= $this->_timeOut) {
+            $response .= fread($streamHandle, 4096);
             $info = stream_get_meta_data($streamHandle);
         }
         fclose($streamHandle);
 
-        if ($info['timed_out']) {
+        if ($info['timed_out'] || time() - $startTime > $this->_timeOut) {
             throw new \RuntimeException("Connection timed out");
         } else {
             $parts = explode("\r\n\r\n", $response);
@@ -246,9 +266,22 @@ class Client
      */
     protected function _openConnection($json)
     {
-        $streamHandle = fsockopen($this->_serverDomain, $this->_serverPort, $errorCode, $errorMessage, $this->_timeOut);
+        $context = stream_context_create();
+        if ($this->_serverTransport == 'ssl') {
+            stream_context_set_option($context, 'ssl', 'allow_self_signed', true);
+            stream_context_set_option($context, 'ssl', 'verify_host', false);
+            stream_context_set_option($context, 'ssl', 'verify_peer', false);
+        }
+
+        $remoteSocket = $this->_serverDomain . ':' . $this->_serverPort;
+        if ($this->_serverTransport) {
+            $remoteSocket = $this->_serverTransport . '://' . $remoteSocket;
+        }
+        $streamHandle = stream_socket_client($remoteSocket, $errorCode, $errorMessage, $this->_timeOut,
+            STREAM_CLIENT_CONNECT, $context
+        );
         if ($streamHandle === false) {
-            throw new \InvalidArgumentException(sprintf("Unable to connect: [%d] %s", $errorCode, $errorMessage));
+            throw new \InvalidArgumentException(sprintf('Unable to connect: [%d] %s', $errorCode, $errorMessage));
         }
 
         fwrite($streamHandle, "POST {$this->_serverPath} HTTP/1.0\r\n");
@@ -262,10 +295,11 @@ class Client
         fwrite($streamHandle, "Connection: close\r\n");
         fwrite($streamHandle, "\r\n");
 
-        // set timeOut for request
-        stream_set_timeout($streamHandle, $this->_timeOut);
-
         fwrite($streamHandle, $json);
+
+        // set timeOut for request
+        stream_set_blocking($streamHandle, false);
+        stream_set_timeout($streamHandle, $this->_timeOut);
 
         return $streamHandle;
     }
