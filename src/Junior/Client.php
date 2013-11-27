@@ -210,7 +210,7 @@ class Client
         try {
             $response = $this->_doRequest($json);
         } catch (\Exception $e) {
-            $message = "Unable to connect to {$this->_serverPath}";
+            $message = "Unable to connect to {$this->_serverDomain}:{$this->_serverPort}{$this->_serverPath}";
             $message .= PHP_EOL . $e->getMessage();
             throw new Clientside\Exception($message);
         }
